@@ -44,9 +44,13 @@ const (
 	// defaultMaxAddresses is the maximum number of addresses to return.
 	defaultMaxAddresses = 16
 
-	// defaultStaleTimeout is the time in which a host is considered
-	// stale.
-	defaultStaleTimeout = time.Hour
+	// defaultStaleGoodTimeout is the time in which a previously reachable
+	// node is considered stale.
+	defaultStaleGoodTimeout = time.Hour
+
+	// defaultStaleBadTimeout is the time in which a previously unreachable
+	// node is considered stale.
+	defaultStaleBadTimeout = time.Hour * 2
 
 	// dumpAddressInterval is the interval used to dump the address
 	// cache to disk for future use.
@@ -121,7 +125,6 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 // Addresses returns IPs that need to be tested again.
 func (m *Manager) Addresses() []*appmessage.NetAddress {
 	addrs := make([]*appmessage.NetAddress, 0, defaultMaxAddresses*8)
-	now := time.Now()
 	i := defaultMaxAddresses
 
 	m.mtx.RLock()
@@ -129,8 +132,7 @@ func (m *Manager) Addresses() []*appmessage.NetAddress {
 		if i == 0 {
 			break
 		}
-		if now.Sub(node.LastSuccess) < defaultStaleTimeout ||
-			now.Sub(node.LastAttempt) < defaultStaleTimeout {
+		if !isStale(node) {
 			continue
 		}
 		addrs = append(addrs, node.Addr)
@@ -157,7 +159,6 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 		return addrs
 	}
 
-	now := time.Now()
 	m.mtx.RLock()
 	for _, node := range m.nodes {
 		if i == 0 {
@@ -178,8 +179,7 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 			continue
 		}
 
-		if node.LastSuccess.IsZero() ||
-			now.Sub(node.LastSuccess) > defaultStaleTimeout {
+		if !isGood(node) {
 			continue
 		}
 
@@ -237,33 +237,21 @@ out:
 }
 
 func (m *Manager) prunePeers() {
-	var count int
-	now := time.Now()
+	var pruned, good int
 	m.mtx.Lock()
 
-	lastSeenAbovePruneExpire := func(node *Node) bool {
-		return now.Sub(node.LastSeen) > pruneExpireTimeout
-	}
-	hadAttemptsButNoSuccess := func(node *Node) bool {
-		return !node.LastAttempt.IsZero() && node.LastSuccess.IsZero()
-	}
-	hadSuccessButLongTimeAgo := func(node *Node) bool {
-		return !node.LastSuccess.IsZero() && now.Sub(node.LastSuccess) > pruneExpireTimeout
-	}
-
 	for k, node := range m.nodes {
-		if lastSeenAbovePruneExpire(node) ||
-			hadAttemptsButNoSuccess(node) ||
-			hadSuccessButLongTimeAgo(node) {
-
+		if isExpired(node) {
 			delete(m.nodes, k)
-			count++
+			pruned++
+		} else if isGood(node) {
+			good++
 		}
 	}
-	l := len(m.nodes)
+	total := len(m.nodes)
 	m.mtx.Unlock()
 
-	log.Infof("Pruned %d addresses: %d remaining", count, l)
+	log.Infof("Pruned %d addresses. %d good of %d known", pruned, good, total)
 }
 
 func (m *Manager) deserializePeers() error {
@@ -319,4 +307,17 @@ func (m *Manager) savePeers() {
 		log.Errorf("Error writing file %s: %v", m.peersFile, err)
 		return
 	}
+}
+
+func isGood(node *Node) bool {
+	return time.Now().Sub(node.LastSuccess) < defaultStaleGoodTimeout
+}
+
+func isStale(node *Node) bool {
+	return !node.LastSuccess.IsZero() && time.Now().Sub(node.LastAttempt) > defaultStaleGoodTimeout ||
+		time.Now().Sub(node.LastAttempt) > defaultStaleBadTimeout
+}
+
+func isExpired(node *Node) bool {
+	return time.Now().Sub(node.LastSeen) > pruneExpireTimeout
 }

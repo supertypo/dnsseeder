@@ -84,8 +84,8 @@ func creep() {
 
 		amgr.AddAddresses(knownPeers)
 		for _, peer := range knownPeers {
-			amgr.Good(peer.IP, nil)
 			amgr.Attempt(peer.IP)
+			amgr.Good(peer.IP, nil)
 		}
 	}
 
@@ -138,7 +138,7 @@ func creep() {
 }
 
 func pollPeer(netAdapter *standalone.MinimalNetAdapter, addr *appmessage.NetAddress) error {
-	defer amgr.Attempt(addr.IP)
+	amgr.Attempt(addr.IP)
 
 	peerAddress := net.JoinHostPort(addr.IP.String(), strconv.Itoa(int(addr.Port)))
 

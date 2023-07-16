@@ -53,9 +53,9 @@ func hostLookup(host string) ([]net.IP, error) {
 func creep() {
 	defer wg.Done()
 
-	netAdapter, err := standalone.NewMinimalNetAdapter(&config.Config{Flags: &config.Flags{NetworkFlags: ActiveConfig().NetworkFlags}})
-	if err != nil {
-		panic(errors.Wrap(err, "Could not start net adapter"))
+	var netAdapters []*standalone.MinimalNetAdapter
+	for i := uint8(0); i < ActiveConfig().Threads; i++ {
+		netAdapters = append(netAdapters, newNetAdapter())
 	}
 
 	var knownPeers []*appmessage.NetAddress
@@ -112,7 +112,7 @@ func creep() {
 			continue
 		}
 
-		for _, addr := range peers {
+		for i, addr := range peers {
 			if atomic.LoadInt32(&systemShutdown) != 0 {
 				log.Infof("Waiting creep threads to terminate")
 				wgCreep.Wait()
@@ -120,10 +120,11 @@ func creep() {
 				return
 			}
 			wgCreep.Add(1)
+			i := i
 			go func(addr *appmessage.NetAddress) {
 				defer wgCreep.Done()
 
-				err := pollPeer(netAdapter, addr)
+				err := pollPeer(netAdapters[i % len(netAdapters)], addr)
 				if err != nil {
 					log.Debugf(err.Error())
 					if defaultSeeder != nil && addr == defaultSeeder {
@@ -140,6 +141,8 @@ func pollPeer(netAdapter *standalone.MinimalNetAdapter, addr *appmessage.NetAddr
 	defer amgr.Attempt(addr.IP)
 
 	peerAddress := net.JoinHostPort(addr.IP.String(), strconv.Itoa(int(addr.Port)))
+
+	log.Debugf("Polling peer %s", peerAddress)
 	routes, err := netAdapter.Connect(peerAddress)
 	if err != nil {
 		return errors.Wrapf(err, "could not connect to %s", peerAddress)
@@ -165,6 +168,14 @@ func pollPeer(netAdapter *standalone.MinimalNetAdapter, addr *appmessage.NetAddr
 	amgr.Good(addr.IP, nil)
 
 	return nil
+}
+
+func newNetAdapter() *standalone.MinimalNetAdapter {
+	netAdapter, err := standalone.NewMinimalNetAdapter(&config.Config{Flags: &config.Flags{NetworkFlags: ActiveConfig().NetworkFlags}})
+	if err != nil {
+		panic(errors.Wrap(err, "Could not start net adapter"))
+	}
+	return netAdapter
 }
 
 func main() {

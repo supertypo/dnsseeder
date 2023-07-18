@@ -240,7 +240,7 @@ out:
 }
 
 func (m *Manager) prunePeers() {
-	var pruned, good int
+	var pruned, good, stale, bad int
 	m.mtx.Lock()
 
 	for k, node := range m.nodes {
@@ -249,12 +249,16 @@ func (m *Manager) prunePeers() {
 			pruned++
 		} else if isGood(node) {
 			good++
+		} else if isStale(node) {
+			stale++
+		} else {
+			bad++
 		}
 	}
 	total := len(m.nodes)
 	m.mtx.Unlock()
 
-	log.Infof("Pruned %d addresses. %d good of %d known", pruned, good, total)
+	log.Infof("Pruned %d addresses. %d left. (Good:%d Stale:%d Bad:%d)", pruned, total, good, stale, bad)
 }
 
 func (m *Manager) deserializePeers() error {

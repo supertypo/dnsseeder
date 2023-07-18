@@ -319,5 +319,6 @@ func isStale(node *Node) bool {
 }
 
 func isExpired(node *Node) bool {
-	return time.Now().Sub(node.LastSeen) > pruneExpireTimeout
+	return time.Now().Sub(node.LastSeen) > pruneExpireTimeout &&
+		time.Now().Sub(node.LastSuccess) > pruneExpireTimeout
 }

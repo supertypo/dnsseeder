@@ -132,6 +132,9 @@ func (m *Manager) Addresses() []*appmessage.NetAddress {
 		if i == 0 {
 			break
 		}
+		if node.Addr.Port != uint16(peersDefaultPort) {
+			continue
+		}
 		if !isStale(node) {
 			continue
 		}

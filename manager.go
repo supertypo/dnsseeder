@@ -100,7 +100,8 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 	m.mtx.Lock()
 	for _, addr := range addrs {
-		if !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
+		if isNonDefaultPort(addr.Port) ||
+			!addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
 			continue
 		}
 		addrStr := addr.IP.String()
@@ -131,9 +132,6 @@ func (m *Manager) Addresses() []*appmessage.NetAddress {
 	for _, node := range m.nodes {
 		if i == 0 {
 			break
-		}
-		if node.Addr.Port != uint16(peersDefaultPort) {
-			continue
 		}
 		if !isStale(node) {
 			continue
@@ -167,25 +165,16 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 		if i == 0 {
 			break
 		}
-
-		if node.Addr.Port != uint16(peersDefaultPort) {
-			continue
-		}
-
 		if !includeAllSubnetworks && !node.SubnetworkID.Equal(subnetworkID) {
 			continue
 		}
-
-		if qtype == dns.TypeA && node.Addr.IP.To4() == nil {
-			continue
-		} else if qtype == dns.TypeAAAA && node.Addr.IP.To4() != nil {
+		if qtype == dns.TypeA && node.Addr.IP.To4() == nil ||
+			qtype == dns.TypeAAAA && node.Addr.IP.To4() != nil {
 			continue
 		}
-
 		if !isGood(node) {
 			continue
 		}
-
 		addrs = append(addrs, node.Addr)
 		i--
 	}
@@ -328,4 +317,8 @@ func isStale(node *Node) bool {
 func isExpired(node *Node) bool {
 	return time.Now().Sub(node.LastSeen) > pruneExpireTimeout &&
 		time.Now().Sub(node.LastSuccess) > pruneExpireTimeout
+}
+
+func isNonDefaultPort(port uint16) bool {
+	return port != uint16(peersDefaultPort)
 }

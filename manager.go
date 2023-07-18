@@ -54,7 +54,7 @@ const (
 
 	// dumpAddressInterval is the interval used to dump the address
 	// cache to disk for future use.
-	dumpAddressInterval = time.Second * 30
+	dumpAddressInterval = time.Minute * 2
 
 	// peersFilename is the name of the file.
 	peersFilename = "nodes.json"
@@ -168,8 +168,8 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 		if !includeAllSubnetworks && !node.SubnetworkID.Equal(subnetworkID) {
 			continue
 		}
-		if qtype == dns.TypeA && node.Addr.IP.To4() == nil ||
-			qtype == dns.TypeAAAA && node.Addr.IP.To4() != nil {
+		if qtype == dns.TypeA && !isIPv4(node.Addr) ||
+			qtype == dns.TypeAAAA && isIPv4(node.Addr) {
 			continue
 		}
 		if !isGood(node) {
@@ -225,11 +225,11 @@ out:
 	}
 	log.Infof("Address manager: saving peers")
 	m.savePeers()
-	log.Infof("Address manager shoutdown")
+	log.Infof("Address manager shutdown")
 }
 
 func (m *Manager) prunePeers() {
-	var pruned, good, stale, bad int
+	var pruned, good, stale, bad, ipv4, ipv6 int
 	m.mtx.Lock()
 
 	for k, node := range m.nodes {
@@ -238,6 +238,11 @@ func (m *Manager) prunePeers() {
 			pruned++
 		} else if isGood(node) {
 			good++
+			if isIPv4(node.Addr) {
+				ipv4++
+			} else {
+				ipv6++
+			}
 		} else if isStale(node) {
 			stale++
 		} else {
@@ -247,7 +252,8 @@ func (m *Manager) prunePeers() {
 	total := len(m.nodes)
 	m.mtx.Unlock()
 
-	log.Infof("Pruned %d addresses. %d left. (Good:%d Stale:%d Bad:%d)", pruned, total, good, stale, bad)
+	log.Infof("Pruned %d addresses. %d left.", pruned, total)
+	log.Infof("Known nodes: Good:%d [4:%d, 6:%d] Stale:%d Bad:%d", good, ipv4, ipv6, stale, bad)
 }
 
 func (m *Manager) deserializePeers() error {
@@ -321,4 +327,8 @@ func isExpired(node *Node) bool {
 
 func isNonDefaultPort(port uint16) bool {
 	return port != uint16(peersDefaultPort)
+}
+
+func isIPv4(addr *appmessage.NetAddress) bool {
+	return addr.IP.To4() != nil
 }

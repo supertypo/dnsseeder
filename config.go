@@ -28,7 +28,7 @@ const (
 	defaultListenPort     = "5354"
 	defaultGrpcListenPort = "3737"
 	defaultLogLevel       = "info"
-	defaultThreads        = 1
+	defaultThreads        = 8
 )
 
 var (
@@ -213,8 +213,8 @@ func loadConfig() (*ConfigFlags, error) {
 
 	initLog(activeConfig.NoLogFiles, activeConfig.LogLevel, appLogFile, appErrLogFile)
 
-	if activeConfig.Threads < 1 || activeConfig.Threads > 8 {
-		str := "threads must be between 1 and 8"
+	if activeConfig.Threads < 1 || activeConfig.Threads > 32 {
+		str := "threads must be between 1 and 32"
 		err := errors.Errorf(str)
 		fmt.Fprintln(os.Stderr, err)
 		return nil, err

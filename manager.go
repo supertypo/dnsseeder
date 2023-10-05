@@ -6,7 +6,7 @@ package main
 
 import (
 	"encoding/json"
-	"net"
+	"strconv"
 	"os"
 	"path/filepath"
 	"sync"
@@ -100,11 +100,10 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 	m.mtx.Lock()
 	for _, addr := range addrs {
-		if isNonDefaultPort(addr.Port) ||
-			!addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
+		if !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
 			continue
 		}
-		addrStr := addr.IP.String()
+		addrStr := addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))
 
 		_, exists := m.nodes[addrStr]
 		if exists {
@@ -125,8 +124,8 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 // Addresses returns IPs that need to be tested again.
 func (m *Manager) Addresses() []*appmessage.NetAddress {
-	addrs := make([]*appmessage.NetAddress, 0, defaultMaxAddresses*8)
-	i := defaultMaxAddresses
+	addrs := make([]*appmessage.NetAddress, 0, 2000)
+	i := ActiveConfig().Threads * 3
 
 	m.mtx.RLock()
 	for _, node := range m.nodes {
@@ -184,9 +183,9 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 }
 
 // Attempt updates the last connection attempt for the specified ip address to now
-func (m *Manager) Attempt(ip net.IP) {
+func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 	m.mtx.Lock()
-	node, exists := m.nodes[ip.String()]
+	node, exists := m.nodes[addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))]
 	if exists {
 		node.LastAttempt = time.Now()
 	}
@@ -194,9 +193,9 @@ func (m *Manager) Attempt(ip net.IP) {
 }
 
 // Good updates the last successful connection attempt for the specified ip address to now
-func (m *Manager) Good(ip net.IP, subnetworkid *externalapi.DomainSubnetworkID) {
+func (m *Manager) Good(addr *appmessage.NetAddress, subnetworkid *externalapi.DomainSubnetworkID) {
 	m.mtx.Lock()
-	node, exists := m.nodes[ip.String()]
+	node, exists := m.nodes[addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))]
 	if exists {
 		node.LastSuccess = time.Now()
 		node.SubnetworkID = subnetworkid
@@ -312,7 +311,7 @@ func (m *Manager) savePeers() {
 }
 
 func isGood(node *Node) bool {
-	return time.Now().Sub(node.LastSuccess) < defaultStaleGoodTimeout
+	return !isNonDefaultPort(node.Addr) && time.Now().Sub(node.LastSuccess) < defaultStaleGoodTimeout
 }
 
 func isStale(node *Node) bool {
@@ -325,8 +324,8 @@ func isExpired(node *Node) bool {
 		time.Now().Sub(node.LastSuccess) > pruneExpireTimeout
 }
 
-func isNonDefaultPort(port uint16) bool {
-	return port != uint16(peersDefaultPort)
+func isNonDefaultPort(addr *appmessage.NetAddress) bool {
+	return addr.Port != uint16(peersDefaultPort)
 }
 
 func isIPv4(addr *appmessage.NetAddress) bool {

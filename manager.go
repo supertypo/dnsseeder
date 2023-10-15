@@ -6,9 +6,9 @@ package main
 
 import (
 	"encoding/json"
-	"strconv"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,6 +23,7 @@ import (
 // Node repesents a node in the Kaspa network
 type Node struct {
 	Addr         *appmessage.NetAddress
+	UserAgent    *string
 	LastAttempt  time.Time
 	LastSuccess  time.Time
 	LastSeen     time.Time
@@ -193,10 +194,11 @@ func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 }
 
 // Good updates the last successful connection attempt for the specified ip address to now
-func (m *Manager) Good(addr *appmessage.NetAddress, subnetworkid *externalapi.DomainSubnetworkID) {
+func (m *Manager) Good(addr *appmessage.NetAddress, userAgent *string, subnetworkid *externalapi.DomainSubnetworkID) {
 	m.mtx.Lock()
 	node, exists := m.nodes[addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))]
 	if exists {
+		node.UserAgent = userAgent
 		node.LastSuccess = time.Now()
 		node.SubnetworkID = subnetworkid
 	}

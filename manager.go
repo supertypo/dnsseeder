@@ -101,7 +101,7 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 	m.mtx.Lock()
 	for _, addr := range addrs {
-		if !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
+		if addr.Port == 0 || !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
 			continue
 		}
 		addrStr := addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))
@@ -186,7 +186,7 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 // Attempt updates the last connection attempt for the specified ip address to now
 func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 	m.mtx.Lock()
-	node, exists := m.nodes[addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))]
+	node, exists := m.nodes[addr.IP.String()+"_"+strconv.Itoa(int(addr.Port))]
 	if exists {
 		node.LastAttempt = time.Now()
 	}
@@ -196,7 +196,7 @@ func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 // Good updates the last successful connection attempt for the specified ip address to now
 func (m *Manager) Good(addr *appmessage.NetAddress, userAgent *string, subnetworkid *externalapi.DomainSubnetworkID) {
 	m.mtx.Lock()
-	node, exists := m.nodes[addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))]
+	node, exists := m.nodes[addr.IP.String()+"_"+strconv.Itoa(int(addr.Port))]
 	if exists {
 		node.UserAgent = userAgent
 		node.LastSuccess = time.Now()

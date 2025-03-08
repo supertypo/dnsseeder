@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/kaspanet/dnsseeder/checkversion"
 	"github.com/kaspanet/dnsseeder/netadapter"
 	"github.com/kaspanet/kaspad/app/protocol/common"
 	"net"
@@ -123,7 +124,7 @@ func creep() {
 			go func(addr *appmessage.NetAddress) {
 				defer wgCreep.Done()
 
-				err := pollPeer(netAdapters[i % len(netAdapters)], addr)
+				err := pollPeer(netAdapters[i%len(netAdapters)], addr)
 				if err != nil {
 					log.Debugf(err.Error())
 					if defaultSeeder != nil && addr == defaultSeeder {
@@ -164,8 +165,12 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	log.Infof("Peer %s (%s) sent %d addresses, %d new",
 		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
 
-	amgr.Good(addr, &msgVersion.UserAgent, nil)
-
+	err = checkversion.CheckVersion(ActiveConfig().MinVersion, msgVersion.UserAgent)
+	if err == nil {
+		amgr.Good(addr, &msgVersion.UserAgent, nil)
+	} else {
+		log.Infof("Peer %s (%s) is below minimum required version %s", peerAddress, msgVersion.UserAgent, ActiveConfig().MinVersion)
+	}
 	return nil
 }
 
@@ -215,7 +220,7 @@ func main() {
 
 		// Try to split seeder host and port
 		foundIp, foundPort, err := net.SplitHostPort(cfg.Seeder)
-		if (err == nil) {
+		if err == nil {
 			seederIp = foundIp
 			seederPort, err = strconv.Atoi(foundPort)
 			if err != nil {

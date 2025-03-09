@@ -141,7 +141,7 @@ func (d *DNSServer) validateDNSRequest(addr *net.UDPAddr, b []byte) (dnsMsg *dns
 	domainName = strings.ToLower(dnsMsg.Question[0].Name)
 	ff := strings.LastIndex(domainName, d.hostname)
 	if ff < 0 {
-		str := fmt.Sprintf("invalid name: %s", dnsMsg.Question[0].Name)
+		str := fmt.Sprintf("%s: invalid name: %s", addr, dnsMsg.Question[0].Name)
 		log.Infof("%s", str)
 		return nil, "", "", errors.Errorf("%s", str)
 	}

@@ -313,17 +313,17 @@ func (m *Manager) savePeers() {
 }
 
 func isGood(node *Node) bool {
-	return !isNonDefaultPort(node.Addr) && time.Now().Sub(node.LastSuccess) < defaultStaleGoodTimeout
+	return !isNonDefaultPort(node.Addr) && time.Since(node.LastSuccess) < defaultStaleGoodTimeout
 }
 
 func isStale(node *Node) bool {
-	return !node.LastSuccess.IsZero() && time.Now().Sub(node.LastAttempt) > defaultStaleGoodTimeout ||
-		time.Now().Sub(node.LastAttempt) > defaultStaleBadTimeout
+	return !node.LastSuccess.IsZero() && time.Since(node.LastAttempt) > defaultStaleGoodTimeout ||
+		time.Since(node.LastAttempt) > defaultStaleBadTimeout
 }
 
 func isExpired(node *Node) bool {
-	return time.Now().Sub(node.LastSeen) > pruneExpireTimeout &&
-		time.Now().Sub(node.LastSuccess) > pruneExpireTimeout
+	return time.Since(node.LastSeen) > pruneExpireTimeout &&
+		time.Since(node.LastSuccess) > pruneExpireTimeout
 }
 
 func isNonDefaultPort(addr *appmessage.NetAddress) bool {

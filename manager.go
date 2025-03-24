@@ -253,7 +253,7 @@ func (m *Manager) prunePeers() {
 	total := len(m.nodes)
 	m.mtx.Unlock()
 
-	log.Infof("Pruned %d addresses. %d left.", pruned, total)
+	log.Debugf("Pruned %d addresses. %d left.", pruned, total)
 	log.Infof("Known nodes: Good:%d [4:%d, 6:%d] Stale:%d Bad:%d", good, ipv4, ipv6, stale, bad)
 }
 

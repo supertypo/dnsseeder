@@ -6,9 +6,9 @@ package main
 
 import (
 	"encoding/json"
-	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,6 +23,7 @@ import (
 // Node repesents a node in the Kaspa network
 type Node struct {
 	Addr         *appmessage.NetAddress
+	UserAgent    *string
 	LastAttempt  time.Time
 	LastSuccess  time.Time
 	LastSeen     time.Time
@@ -44,13 +45,17 @@ const (
 	// defaultMaxAddresses is the maximum number of addresses to return.
 	defaultMaxAddresses = 16
 
-	// defaultStaleTimeout is the time in which a host is considered
-	// stale.
-	defaultStaleTimeout = time.Hour
+	// defaultStaleGoodTimeout is the time in which a previously reachable
+	// node is considered stale.
+	defaultStaleGoodTimeout = time.Hour
+
+	// defaultStaleBadTimeout is the time in which a previously unreachable
+	// node is considered stale.
+	defaultStaleBadTimeout = time.Hour * 2
 
 	// dumpAddressInterval is the interval used to dump the address
 	// cache to disk for future use.
-	dumpAddressInterval = time.Second * 30
+	dumpAddressInterval = time.Minute * 2
 
 	// peersFilename is the name of the file.
 	peersFilename = "nodes.json"
@@ -96,10 +101,10 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 	m.mtx.Lock()
 	for _, addr := range addrs {
-		if !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
+		if addr.Port == 0 || !addressmanager.IsRoutable(addr, ActiveConfig().NetParams().AcceptUnroutable) {
 			continue
 		}
-		addrStr := addr.IP.String()
+		addrStr := addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))
 
 		_, exists := m.nodes[addrStr]
 		if exists {
@@ -120,17 +125,15 @@ func (m *Manager) AddAddresses(addrs []*appmessage.NetAddress) int {
 
 // Addresses returns IPs that need to be tested again.
 func (m *Manager) Addresses() []*appmessage.NetAddress {
-	addrs := make([]*appmessage.NetAddress, 0, defaultMaxAddresses*8)
-	now := time.Now()
-	i := defaultMaxAddresses
+	addrs := make([]*appmessage.NetAddress, 0, 2000)
+	i := ActiveConfig().Threads * 3
 
 	m.mtx.RLock()
 	for _, node := range m.nodes {
 		if i == 0 {
 			break
 		}
-		if now.Sub(node.LastSuccess) < defaultStaleTimeout ||
-			now.Sub(node.LastAttempt) < defaultStaleTimeout {
+		if !isStale(node) {
 			continue
 		}
 		addrs = append(addrs, node.Addr)
@@ -157,32 +160,21 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 		return addrs
 	}
 
-	now := time.Now()
 	m.mtx.RLock()
 	for _, node := range m.nodes {
 		if i == 0 {
 			break
 		}
-
-		if node.Addr.Port != uint16(peersDefaultPort) {
-			continue
-		}
-
 		if !includeAllSubnetworks && !node.SubnetworkID.Equal(subnetworkID) {
 			continue
 		}
-
-		if qtype == dns.TypeA && node.Addr.IP.To4() == nil {
-			continue
-		} else if qtype == dns.TypeAAAA && node.Addr.IP.To4() != nil {
+		if qtype == dns.TypeA && !isIPv4(node.Addr) ||
+			qtype == dns.TypeAAAA && isIPv4(node.Addr) {
 			continue
 		}
-
-		if node.LastSuccess.IsZero() ||
-			now.Sub(node.LastSuccess) > defaultStaleTimeout {
+		if !isGood(node) {
 			continue
 		}
-
 		addrs = append(addrs, node.Addr)
 		i--
 	}
@@ -192,9 +184,9 @@ func (m *Manager) GoodAddresses(qtype uint16, includeAllSubnetworks bool, subnet
 }
 
 // Attempt updates the last connection attempt for the specified ip address to now
-func (m *Manager) Attempt(ip net.IP) {
+func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 	m.mtx.Lock()
-	node, exists := m.nodes[ip.String()]
+	node, exists := m.nodes[addr.IP.String()+"_"+strconv.Itoa(int(addr.Port))]
 	if exists {
 		node.LastAttempt = time.Now()
 	}
@@ -202,10 +194,11 @@ func (m *Manager) Attempt(ip net.IP) {
 }
 
 // Good updates the last successful connection attempt for the specified ip address to now
-func (m *Manager) Good(ip net.IP, subnetworkid *externalapi.DomainSubnetworkID) {
+func (m *Manager) Good(addr *appmessage.NetAddress, userAgent *string, subnetworkid *externalapi.DomainSubnetworkID) {
 	m.mtx.Lock()
-	node, exists := m.nodes[ip.String()]
+	node, exists := m.nodes[addr.IP.String()+"_"+strconv.Itoa(int(addr.Port))]
 	if exists {
+		node.UserAgent = userAgent
 		node.LastSuccess = time.Now()
 		node.SubnetworkID = subnetworkid
 	}
@@ -233,37 +226,35 @@ out:
 	}
 	log.Infof("Address manager: saving peers")
 	m.savePeers()
-	log.Infof("Address manager shoutdown")
+	log.Infof("Address manager shutdown")
 }
 
 func (m *Manager) prunePeers() {
-	var count int
-	now := time.Now()
+	var pruned, good, stale, bad, ipv4, ipv6 int
 	m.mtx.Lock()
 
-	lastSeenAbovePruneExpire := func(node *Node) bool {
-		return now.Sub(node.LastSeen) > pruneExpireTimeout
-	}
-	hadAttemptsButNoSuccess := func(node *Node) bool {
-		return !node.LastAttempt.IsZero() && node.LastSuccess.IsZero()
-	}
-	hadSuccessButLongTimeAgo := func(node *Node) bool {
-		return !node.LastSuccess.IsZero() && now.Sub(node.LastSuccess) > pruneExpireTimeout
-	}
-
 	for k, node := range m.nodes {
-		if lastSeenAbovePruneExpire(node) ||
-			hadAttemptsButNoSuccess(node) ||
-			hadSuccessButLongTimeAgo(node) {
-
+		if isExpired(node) {
 			delete(m.nodes, k)
-			count++
+			pruned++
+		} else if isGood(node) {
+			good++
+			if isIPv4(node.Addr) {
+				ipv4++
+			} else {
+				ipv6++
+			}
+		} else if isStale(node) {
+			stale++
+		} else {
+			bad++
 		}
 	}
-	l := len(m.nodes)
+	total := len(m.nodes)
 	m.mtx.Unlock()
 
-	log.Infof("Pruned %d addresses: %d remaining", count, l)
+	log.Infof("Pruned %d addresses. %d left.", pruned, total)
+	log.Infof("Known nodes: Good:%d [4:%d, 6:%d] Stale:%d Bad:%d", good, ipv4, ipv6, stale, bad)
 }
 
 func (m *Manager) deserializePeers() error {
@@ -319,4 +310,26 @@ func (m *Manager) savePeers() {
 		log.Errorf("Error writing file %s: %v", m.peersFile, err)
 		return
 	}
+}
+
+func isGood(node *Node) bool {
+	return !isNonDefaultPort(node.Addr) && time.Since(node.LastSuccess) < defaultStaleGoodTimeout
+}
+
+func isStale(node *Node) bool {
+	return !node.LastSuccess.IsZero() && time.Since(node.LastAttempt) > defaultStaleGoodTimeout ||
+		time.Since(node.LastAttempt) > defaultStaleBadTimeout
+}
+
+func isExpired(node *Node) bool {
+	return time.Since(node.LastSeen) > pruneExpireTimeout &&
+		time.Since(node.LastSuccess) > pruneExpireTimeout
+}
+
+func isNonDefaultPort(addr *appmessage.NetAddress) bool {
+	return addr.Port != uint16(peersDefaultPort)
+}
+
+func isIPv4(addr *appmessage.NetAddress) bool {
+	return addr.IP.To4() != nil
 }

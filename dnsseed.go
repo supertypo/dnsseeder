@@ -6,6 +6,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/kaspanet/dnsseeder/netadapter"
+	"github.com/kaspanet/kaspad/app/protocol/common"
 	"net"
 	"os"
 	"strconv"
@@ -14,10 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kaspanet/kaspad/app/protocol/common"
 	"github.com/kaspanet/kaspad/infrastructure/config"
-	"github.com/kaspanet/kaspad/infrastructure/network/netadapter/standalone"
-
 	"github.com/pkg/errors"
 
 	"github.com/kaspanet/dnsseeder/version"
@@ -53,9 +52,9 @@ func hostLookup(host string) ([]net.IP, error) {
 func creep() {
 	defer wg.Done()
 
-	netAdapter, err := standalone.NewMinimalNetAdapter(&config.Config{Flags: &config.Flags{NetworkFlags: ActiveConfig().NetworkFlags}})
-	if err != nil {
-		panic(errors.Wrap(err, "Could not start net adapter"))
+	var netAdapters []*netadapter.DnsseedNetAdapter
+	for i := uint8(0); i < ActiveConfig().Threads; i++ {
+		netAdapters = append(netAdapters, newNetAdapter())
 	}
 
 	var knownPeers []*appmessage.NetAddress
@@ -84,8 +83,8 @@ func creep() {
 
 		amgr.AddAddresses(knownPeers)
 		for _, peer := range knownPeers {
-			amgr.Good(peer.IP, nil)
-			amgr.Attempt(peer.IP)
+			amgr.Attempt(peer)
+			amgr.Good(peer, nil, nil)
 		}
 	}
 
@@ -101,8 +100,8 @@ func creep() {
 			peers = amgr.Addresses()
 		}
 		if len(peers) == 0 {
-			log.Infof("No stale addresses -- sleeping for 10 minutes")
-			for i := 0; i < 600; i++ {
+			log.Debugf("No stale addresses")
+			for i := 0; i < 10; i++ {
 				time.Sleep(time.Second)
 				if atomic.LoadInt32(&systemShutdown) != 0 {
 					log.Infof("Creep thread shutdown")
@@ -112,7 +111,7 @@ func creep() {
 			continue
 		}
 
-		for _, addr := range peers {
+		for i, addr := range peers {
 			if atomic.LoadInt32(&systemShutdown) != 0 {
 				log.Infof("Waiting creep threads to terminate")
 				wgCreep.Wait()
@@ -120,10 +119,11 @@ func creep() {
 				return
 			}
 			wgCreep.Add(1)
+			i := i
 			go func(addr *appmessage.NetAddress) {
 				defer wgCreep.Done()
 
-				err := pollPeer(netAdapter, addr)
+				err := pollPeer(netAdapters[i % len(netAdapters)], addr)
 				if err != nil {
 					log.Debugf(err.Error())
 					if defaultSeeder != nil && addr == defaultSeeder {
@@ -136,11 +136,13 @@ func creep() {
 	}
 }
 
-func pollPeer(netAdapter *standalone.MinimalNetAdapter, addr *appmessage.NetAddress) error {
-	defer amgr.Attempt(addr.IP)
+func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddress) error {
+	amgr.Attempt(addr)
 
 	peerAddress := net.JoinHostPort(addr.IP.String(), strconv.Itoa(int(addr.Port)))
-	routes, err := netAdapter.Connect(peerAddress)
+
+	log.Debugf("Polling peer %s", peerAddress)
+	routes, msgVersion, err := netAdapter.Connect(peerAddress)
 	if err != nil {
 		return errors.Wrapf(err, "could not connect to %s", peerAddress)
 	}
@@ -159,12 +161,20 @@ func pollPeer(netAdapter *standalone.MinimalNetAdapter, addr *appmessage.NetAddr
 	msgAddresses := message.(*appmessage.MsgAddresses)
 
 	added := amgr.AddAddresses(msgAddresses.AddressList)
-	log.Infof("Peer %s sent %d addresses, %d new",
-		peerAddress, len(msgAddresses.AddressList), added)
+	log.Infof("Peer %s (%s) sent %d addresses, %d new",
+		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
 
-	amgr.Good(addr.IP, nil)
+	amgr.Good(addr, &msgVersion.UserAgent, nil)
 
 	return nil
+}
+
+func newNetAdapter() *netadapter.DnsseedNetAdapter {
+	netAdapter, err := netadapter.NewDnsseedNetAdapter(&config.Config{Flags: &config.Flags{NetworkFlags: ActiveConfig().NetworkFlags}})
+	if err != nil {
+		panic(errors.Wrap(err, "Could not start net adapter"))
+	}
+	return netAdapter
 }
 
 func main() {

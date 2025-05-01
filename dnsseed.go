@@ -150,7 +150,7 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	defer routes.Disconnect()
 
 	// Abort before collecting peers for nodes below minimum protocol
-	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < 7 {
+	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < uint32(ActiveConfig().MinProtoVer) {
 		return errors.Errorf("Peer %s protocol version %d is below minimum: %d",
 			peerAddress, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
 	}

@@ -172,11 +172,11 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
 
 	// Abort after collecting peers for nodes below minimum user agent version
-	if ActiveConfig().MinVersion != "" {
-		err = checkversion.CheckVersion(ActiveConfig().MinVersion, msgVersion.UserAgent)
+	if ActiveConfig().MinUaVer != "" {
+		err = checkversion.CheckVersion(ActiveConfig().MinUaVer, msgVersion.UserAgent)
 		if err != nil {
 			return errors.Wrapf(err, "Peer %s version %s doesn't satisfy minimum: %s",
-				peerAddress, msgVersion.UserAgent, ActiveConfig().MinVersion)
+				peerAddress, msgVersion.UserAgent, ActiveConfig().MinUaVer)
 		}
 	}
 	amgr.Good(addr, &msgVersion.UserAgent, nil)

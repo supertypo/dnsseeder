@@ -165,12 +165,18 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	log.Infof("Peer %s (%s) sent %d addresses, %d new",
 		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
 
-	err = checkversion.CheckVersion(ActiveConfig().MinVersion, msgVersion.UserAgent)
-	if err == nil {
-		amgr.Good(addr, &msgVersion.UserAgent, nil)
-	} else {
-		log.Infof("Peer %s (%s) is below minimum required version %s", peerAddress, msgVersion.UserAgent, ActiveConfig().MinVersion)
+	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < 7 {
+		return errors.Errorf("Peer %s protocol version %d is below minimum: %d",
+			peerAddress, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
 	}
+	if ActiveConfig().MinVersion != "" {
+		err = checkversion.CheckVersion(ActiveConfig().MinVersion, msgVersion.UserAgent)
+		if err != nil {
+			return errors.Wrapf(err, "Peer %s version %s doesn't satisfy minimum: %s",
+				peerAddress, msgVersion.UserAgent, ActiveConfig().MinVersion)
+		}
+	}
+	amgr.Good(addr, &msgVersion.UserAgent, nil)
 	return nil
 }
 

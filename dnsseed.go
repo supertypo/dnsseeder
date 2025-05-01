@@ -149,6 +149,12 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	}
 	defer routes.Disconnect()
 
+	// Abort before collecting peers for nodes below minimum protocol
+	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < 7 {
+		return errors.Errorf("Peer %s protocol version %d is below minimum: %d",
+			peerAddress, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
+	}
+
 	msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
 	err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
 	if err != nil {
@@ -165,10 +171,7 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	log.Infof("Peer %s (%s) sent %d addresses, %d new",
 		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
 
-	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < 7 {
-		return errors.Errorf("Peer %s protocol version %d is below minimum: %d",
-			peerAddress, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
-	}
+	// Abort after collecting peers for nodes below minimum user agent version
 	if ActiveConfig().MinVersion != "" {
 		err = checkversion.CheckVersion(ActiveConfig().MinVersion, msgVersion.UserAgent)
 		if err != nil {

@@ -1,6 +1,8 @@
 package netadapter
 
 import (
+	"fmt"
+	"github.com/kaspanet/dnsseeder/version"
 	"sync"
 
 	"github.com/kaspanet/kaspad/app/protocol/common"
@@ -119,7 +121,7 @@ func (mna *DnsseedNetAdapter) handleHandshake(routes *Routes, ourID *id.ID) (*ap
 		Timestamp:       mstime.Now(),
 		Address:         nil,
 		ID:              ourID,
-		UserAgent:       "/net-adapter-mock/",
+		UserAgent:       fmt.Sprintf("/kaspa-dnsseeder:%s/", version.Version()),
 		DisableRelayTx:  true,
 		SubnetworkID:    nil,
 	})

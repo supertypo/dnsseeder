@@ -6,7 +6,7 @@ import (
 
 func TestCheckVersion(t *testing.T) {
 	tests := []struct {
-		minVersion string
+		minUaVer   string
 		userAgent  string
 		shouldFail bool
 	}{
@@ -30,12 +30,12 @@ func TestCheckVersion(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := CheckVersion(tt.minVersion, tt.userAgent)
+		err := CheckVersion(tt.minUaVer, tt.userAgent)
 		if tt.shouldFail && err == nil {
-			t.Errorf("Expected failure for %q with %q, but got nil", tt.minVersion, tt.userAgent)
+			t.Errorf("Expected failure for %q with %q, but got nil", tt.minUaVer, tt.userAgent)
 		}
 		if !tt.shouldFail && err != nil {
-			t.Errorf("Unexpected error for %q with %q: %v", tt.minVersion, tt.userAgent, err)
+			t.Errorf("Unexpected error for %q with %q: %v", tt.minUaVer, tt.userAgent, err)
 		}
 	}
 }

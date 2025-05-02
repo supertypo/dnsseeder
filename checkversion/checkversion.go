@@ -10,11 +10,11 @@ import (
 
 var versionRegexp = regexp.MustCompile(`\b(\d+\.\d+\.\d+)\b`)
 
-func CheckVersion(minVersion string, userAgent string) error {
-	if minVersion == "" {
+func CheckVersion(minUaVer string, userAgent string) error {
+	if minUaVer == "" {
 		return nil
 	}
-	minVer, err := version.NewVersion(minVersion)
+	minVer, err := version.NewVersion(minUaVer)
 	if err != nil {
 		return err
 	}

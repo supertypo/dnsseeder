@@ -3,6 +3,7 @@ module github.com/kaspanet/dnsseeder
 go 1.18
 
 require (
+	github.com/hashicorp/go-version v1.7.0
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kaspanet/kaspad v0.12.7
 	github.com/miekg/dns v1.1.25

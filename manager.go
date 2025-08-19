@@ -47,7 +47,7 @@ const (
 
 	// defaultStaleGoodTimeout is the time in which a previously reachable
 	// node is considered stale.
-	defaultStaleGoodTimeout = time.Hour
+	defaultStaleGoodTimeout = time.Minute * 15
 
 	// defaultStaleBadTimeout is the time in which a previously unreachable
 	// node is considered stale.

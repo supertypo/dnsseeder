@@ -155,21 +155,27 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 			peerAddress, msgVersion.UserAgent, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
 	}
 
-	msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
-	err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
-	if err != nil {
-		return errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
+	var addresses []*appmessage.NetAddress
+	for i := 0; i < 5; i++ {
+		msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
+		err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
+		if err != nil {
+			return errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
+		}
+		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, common.DefaultTimeout)
+		if err != nil {
+			return errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
+		}
+		addrList := message.(*appmessage.MsgAddresses).AddressList
+		addresses = append(addresses, addrList...)
+		if i < 2 {
+			time.Sleep(200 * time.Millisecond)
+		}
 	}
 
-	message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, common.DefaultTimeout)
-	if err != nil {
-		return errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
-	}
-	msgAddresses := message.(*appmessage.MsgAddresses)
-
-	added := amgr.AddAddresses(msgAddresses.AddressList)
+	added := amgr.AddAddresses(addresses)
 	log.Infof("Peer %s (%s) sent %d addresses, %d new",
-		peerAddress, msgVersion.UserAgent, len(msgAddresses.AddressList), added)
+		peerAddress, msgVersion.UserAgent, len(addresses), added)
 
 	// Abort after collecting peers for nodes below minimum user agent version
 	if ActiveConfig().MinUaVer != "" {

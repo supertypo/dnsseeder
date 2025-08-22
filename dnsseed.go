@@ -28,6 +28,8 @@ import (
 	"github.com/kaspanet/kaspad/app/appmessage"
 	"github.com/kaspanet/kaspad/infrastructure/os/signal"
 
+	"io"
+	"net/http"
 	_ "net/http/pprof"
 )
 
@@ -197,6 +199,57 @@ func newNetAdapter() *netadapter.DnsseedNetAdapter {
 	return netAdapter
 }
 
+func startHTTPServer(listenAddr string) {
+	netAdapter := newNetAdapter()
+
+	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		ipStr := strings.TrimSpace(string(body))
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			http.Error(w, "Invalid IP address", http.StatusBadRequest)
+			return
+		}
+
+		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
+
+		if err := pollPeer(netAdapter, addr); err != nil {
+			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		amgr.AddAddresses([]*appmessage.NetAddress{addr})
+		if err := pollPeer(netAdapter, addr); err != nil {
+			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		log.Infof("Peer %s added and verified OK", ipStr)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(fmt.Sprintf("Peer %s added and verified OK\n", ipStr)))
+	})
+
+	go func() {
+		log.Infof("Starting HTTP control server on 127.0.0.1:5380")
+		if err := http.ListenAndServe(listenAddr, nil); err != nil {
+			log.Errorf("HTTP control server failed: %v", err)
+		}
+	}()
+}
+
 func main() {
 	defer panics.HandlePanic(log, "main", nil)
 	interrupt := signal.InterruptListener()
@@ -260,6 +313,9 @@ func main() {
 			defaultSeeder = appmessage.NewNetAddressIPPort(ip, uint16(seederPort))
 			amgr.AddAddresses([]*appmessage.NetAddress{defaultSeeder})
 		}
+	}
+	if cfg.HttpListen != "" {
+		startHTTPServer(cfg.HttpListen)
 	}
 
 	wg.Add(1)

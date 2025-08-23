@@ -229,7 +229,13 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 			return
 		}
 
-		clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+		clientIP := r.Header.Get("X-Forwarded-For")
+		if clientIP != "" {
+			parts := strings.Split(clientIP, ",")
+			clientIP = strings.TrimSpace(parts[0])
+		} else {
+			clientIP, _, _ = net.SplitHostPort(r.RemoteAddr)
+		}
 		if perIpQueryCount[clientIP] >= maxQueriesPerSource {
 			http.Error(w, fmt.Sprintf("Too many queries from %s", clientIP), http.StatusTooManyRequests)
 			return

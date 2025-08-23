@@ -320,6 +320,10 @@ func (m *Manager) savePeers() {
 	}
 }
 
+func (m *Manager) IsGood(node *Node) bool {
+	return isGood(node)
+}
+
 func isGood(node *Node) bool {
 	return !isNonDefaultPort(node.Addr) && time.Now().Sub(node.LastSuccess) < defaultStaleGoodTimeout
 }

@@ -253,8 +253,13 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
 		existingNode := amgr.GetNode(addr)
 		if existingNode != nil {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(fmt.Sprintf("Peer %s already exists\n", ipStr)))
+			if amgr.IsGood(existingNode) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(fmt.Sprintf("Peer %s exists and is verified OK\n", ipStr)))
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(fmt.Sprintf("Peer %s could not be verified\n", ipStr)))
+			}
 			return
 		}
 

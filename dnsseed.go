@@ -246,7 +246,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		msgVersion, err := pollPeer(netAdapter, addr)
 		if err != nil {
 			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		amgr.AddAddresses([]*appmessage.NetAddress{addr})

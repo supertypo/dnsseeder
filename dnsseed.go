@@ -242,6 +242,12 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		}
 
 		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
+		existingNode := amgr.GetNode(addr)
+		if existingNode != nil {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fmt.Sprintf("Peer %s already exists\n", ipStr)))
+			return
+		}
 
 		msgVersion, err := pollPeer(netAdapter, addr)
 		if err != nil {

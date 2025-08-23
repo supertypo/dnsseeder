@@ -144,6 +144,14 @@ func (m *Manager) Addresses() []*appmessage.NetAddress {
 	return addrs
 }
 
+// GetNode returns the node for the given NetAddress, or nil if not found.
+func (m *Manager) GetNode(addr *appmessage.NetAddress) *Node {
+	addrStr := addr.IP.String() + "_" + strconv.Itoa(int(addr.Port))
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
+	return m.nodes[addrStr]
+}
+
 // AddressCount returns number of known nodes.
 func (m *Manager) AddressCount() int {
 	return len(m.nodes)

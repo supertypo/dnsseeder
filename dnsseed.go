@@ -199,10 +199,27 @@ func newNetAdapter() *netadapter.DnsseedNetAdapter {
 	return netAdapter
 }
 
-func startHTTPServer(listenAddr string) {
+func startHTTPServer(listenAddr string, corsOrigins []string) {
+	allowedOrigins := make(map[string]bool, len(corsOrigins))
+	for _, o := range corsOrigins {
+		allowedOrigins[o] = true
+	}
 	netAdapter := newNetAdapter()
 
 	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 			return
@@ -315,7 +332,7 @@ func main() {
 		}
 	}
 	if cfg.HttpListen != "" {
-		startHTTPServer(cfg.HttpListen)
+		startHTTPServer(cfg.HttpListen, cfg.CorsOrigins)
 	}
 
 	wg.Add(1)

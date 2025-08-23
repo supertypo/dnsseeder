@@ -276,20 +276,6 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		}
 
 		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
-		existingNode := amgr.GetNode(addr)
-		if existingNode != nil {
-			if amgr.IsGood(existingNode) {
-				w.WriteHeader(http.StatusOK)
-				log.Infof("Http [%s]: Peer '%s' exists and is verified OK", clientIP, ipStr)
-				_, _ = w.Write([]byte(fmt.Sprintf("Peer '%s' exists and is verified OK\n", ipStr)))
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				log.Infof("Http [%s]: Peer '%s' could not be verified", clientIP, ipStr)
-				_, _ = w.Write([]byte(fmt.Sprintf("Peer '%s' could not be verified\n", ipStr)))
-			}
-			return
-		}
-
 		msgVersion, err := pollPeer(netAdapter, addr)
 		if err != nil {
 			log.Infof("Http [%s]: Peer '%s' could not be verified, poll failed: %v", clientIP, ipStr, err)

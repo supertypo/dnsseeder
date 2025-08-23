@@ -205,6 +205,8 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		allowedOrigins[o] = true
 	}
 	netAdapter := newNetAdapter()
+	perIpQueryCount := make(map[string]int)
+	const maxQueriesPerSource = 100
 
 	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -227,12 +229,19 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 			return
 		}
 
+		clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if perIpQueryCount[clientIP] >= maxQueriesPerSource {
+			http.Error(w, fmt.Sprintf("Too many queries from %s", clientIP), http.StatusTooManyRequests)
+			return
+		}
+		perIpQueryCount[clientIP]++
+
+		defer func() { _ = r.Body.Close() }()
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "Failed to read body", http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
 
 		ipStr := strings.TrimSpace(string(body))
 		ip := net.ParseIP(ipStr)

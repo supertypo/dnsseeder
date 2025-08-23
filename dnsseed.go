@@ -211,7 +211,15 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 
 	sema := make(chan struct{}, maxConcurrentQueries)
 	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		clientIP := r.Header.Get("X-Forwarded-For")
+		if clientIP != "" {
+			parts := strings.Split(clientIP, ",")
+			clientIP = strings.TrimSpace(parts[0])
+		} else {
+			clientIP, _, _ = net.SplitHostPort(r.RemoteAddr)
+		}
 		if len(sema) == cap(sema) {
+			log.Warnf("Http [%s]: Server busy, try again later", clientIP)
 			http.Error(w, "Server busy, try again later", http.StatusTooManyRequests)
 			return
 		}
@@ -227,29 +235,26 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
 			}
 		} else {
+			log.Warnf("Http [%s]: Request without correct origin", clientIP)
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
 
 		if r.Method == http.MethodOptions {
+			log.Debugf("Http [%s]: Options requested", clientIP)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
 		if r.Method != http.MethodPost {
+			log.Warnf("Http [%s]: Disallowed method '%s'", clientIP, r.Method)
 			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		clientIP := r.Header.Get("X-Forwarded-For")
-		if clientIP != "" {
-			parts := strings.Split(clientIP, ",")
-			clientIP = strings.TrimSpace(parts[0])
-		} else {
-			clientIP, _, _ = net.SplitHostPort(r.RemoteAddr)
-		}
 		if perIpQueryCount[clientIP] >= maxQueriesPerSource {
-			http.Error(w, fmt.Sprintf("Too many queries from %s", clientIP), http.StatusTooManyRequests)
+			log.Warnf("Http [%s]: Too many queries", clientIP)
+			http.Error(w, "Too many queries", http.StatusTooManyRequests)
 			return
 		}
 		perIpQueryCount[clientIP]++
@@ -257,6 +262,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		defer func() { _ = r.Body.Close() }()
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			log.Warnf("Http [%s]: Failed to read body", clientIP)
 			http.Error(w, "Failed to read body", http.StatusBadRequest)
 			return
 		}
@@ -264,6 +270,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		ipStr := strings.TrimSpace(string(body))
 		ip := net.ParseIP(ipStr)
 		if ip == nil {
+			log.Infof("Http [%s]: Invalid IP address '%s'", clientIP, ipStr)
 			http.Error(w, "Invalid IP address", http.StatusBadRequest)
 			return
 		}
@@ -273,17 +280,19 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		if existingNode != nil {
 			if amgr.IsGood(existingNode) {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(fmt.Sprintf("Peer %s exists and is verified OK\n", ipStr)))
+				log.Infof("Http [%s]: Peer '%s' exists and is verified OK", clientIP, ipStr)
+				_, _ = w.Write([]byte(fmt.Sprintf("Peer '%s' exists and is verified OK\n", ipStr)))
 			} else {
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(fmt.Sprintf("Peer %s could not be verified\n", ipStr)))
+				log.Infof("Http [%s]: Peer '%s' could not be verified", clientIP, ipStr)
+				_, _ = w.Write([]byte(fmt.Sprintf("Peer '%s' could not be verified\n", ipStr)))
 			}
 			return
 		}
 
 		msgVersion, err := pollPeer(netAdapter, addr)
 		if err != nil {
-			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
+			log.Infof("Http [%s]: Peer '%s' could not be verified, poll failed: %v", clientIP, ipStr, err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -291,7 +300,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		amgr.Attempt(addr)
 		amgr.Good(addr, &msgVersion.UserAgent, nil)
 
-		log.Infof("Peer %s added and verified OK", ipStr)
+		log.Infof("Http [%s]: Peer '%s' added and verified OK", clientIP, ipStr)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(fmt.Sprintf("Peer %s added and verified OK\n", ipStr)))
 	})

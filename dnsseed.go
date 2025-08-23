@@ -126,7 +126,7 @@ func creep() {
 			go func(addr *appmessage.NetAddress) {
 				defer wgCreep.Done()
 
-				err := pollPeer(netAdapters[i%len(netAdapters)], addr)
+				_, err := pollPeer(netAdapters[i%len(netAdapters)], addr)
 				if err != nil {
 					log.Debugf(err.Error())
 					if defaultSeeder != nil && addr == defaultSeeder {
@@ -139,7 +139,7 @@ func creep() {
 	}
 }
 
-func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddress) error {
+func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddress) (*appmessage.MsgVersion, error) {
 	amgr.Attempt(addr)
 
 	peerAddress := net.JoinHostPort(addr.IP.String(), strconv.Itoa(int(addr.Port)))
@@ -147,13 +147,13 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	log.Debugf("Polling peer %s", peerAddress)
 	routes, msgVersion, err := netAdapter.Connect(peerAddress)
 	if err != nil {
-		return errors.Wrapf(err, "could not connect to %s", peerAddress)
+		return nil, errors.Wrapf(err, "could not connect to %s", peerAddress)
 	}
 	defer routes.Disconnect()
 
 	// Abort before collecting peers for nodes below minimum protocol
 	if ActiveConfig().MinProtoVer > 0 && msgVersion.ProtocolVersion < uint32(ActiveConfig().MinProtoVer) {
-		return errors.Errorf("Peer %s (%s) protocol version %d is below minimum: %d",
+		return nil, errors.Errorf("Peer %s (%s) protocol version %d is below minimum: %d",
 			peerAddress, msgVersion.UserAgent, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
 	}
 
@@ -162,11 +162,11 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 		msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
 		err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
 		if err != nil {
-			return errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
+			return nil, errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
 		}
 		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, common.DefaultTimeout)
 		if err != nil {
-			return errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
+			return nil, errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
 		}
 		addrList := message.(*appmessage.MsgAddresses).AddressList
 		addresses = append(addresses, addrList...)
@@ -183,12 +183,12 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	if ActiveConfig().MinUaVer != "" {
 		err = checkversion.CheckVersion(ActiveConfig().MinUaVer, msgVersion.UserAgent)
 		if err != nil {
-			return errors.Wrapf(err, "Peer %s version %s doesn't satisfy minimum: %s",
+			return nil, errors.Wrapf(err, "Peer %s version %s doesn't satisfy minimum: %s",
 				peerAddress, msgVersion.UserAgent, ActiveConfig().MinUaVer)
 		}
 	}
 	amgr.Good(addr, &msgVersion.UserAgent, nil)
-	return nil
+	return msgVersion, nil
 }
 
 func newNetAdapter() *netadapter.DnsseedNetAdapter {
@@ -241,18 +241,15 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 
 		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
 
-		if err := pollPeer(netAdapter, addr); err != nil {
+		msgVersion, err := pollPeer(netAdapter, addr)
+		if err != nil {
 			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-
 		amgr.AddAddresses([]*appmessage.NetAddress{addr})
-		if err := pollPeer(netAdapter, addr); err != nil {
-			log.Warnf("Peer %s could not be verified, poll failed: %v", ipStr, err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+		amgr.Attempt(addr)
+		amgr.Good(addr, &msgVersion.UserAgent, nil)
 
 		log.Infof("Peer %s added and verified OK", ipStr)
 		w.WriteHeader(http.StatusOK)
@@ -260,7 +257,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 	})
 
 	go func() {
-		log.Infof("Starting HTTP control server on 127.0.0.1:5380")
+		log.Infof("Starting HTTP control server on %s", listenAddr)
 		if err := http.ListenAndServe(listenAddr, nil); err != nil {
 			log.Errorf("HTTP control server failed: %v", err)
 		}

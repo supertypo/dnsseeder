@@ -207,8 +207,17 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 	netAdapter := newNetAdapter()
 	perIpQueryCount := make(map[string]int)
 	const maxQueriesPerSource = 100
+	const maxConcurrentQueries = 3
 
+	sema := make(chan struct{}, maxConcurrentQueries)
 	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		if len(sema) == cap(sema) {
+			http.Error(w, "Server busy, try again later", http.StatusTooManyRequests)
+			return
+		}
+		sema <- struct{}{}
+		defer func() { <-sema }()
+
 		origin := r.Header.Get("Origin")
 		if allowedOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -217,6 +226,9 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 			if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
 				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
 			}
+		} else {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
 		}
 
 		if r.Method == http.MethodOptions {

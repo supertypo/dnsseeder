@@ -6,9 +6,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/kaspanet/dnsseeder/checkversion"
-	"github.com/kaspanet/dnsseeder/netadapter"
-	"github.com/kaspanet/kaspad/app/protocol/common"
 	"net"
 	"os"
 	"strconv"
@@ -16,6 +13,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/kaspanet/dnsseeder/checkversion"
+	"github.com/kaspanet/dnsseeder/netadapter"
 
 	"github.com/kaspanet/kaspad/infrastructure/config"
 	"github.com/pkg/errors"
@@ -158,21 +158,18 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	}
 
 	var addresses []*appmessage.NetAddress
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 2; i++ {
 		msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
 		err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
 		}
-		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, common.DefaultTimeout)
+		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, 10*time.Second)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
 		}
 		addrList := message.(*appmessage.MsgAddresses).AddressList
 		addresses = append(addresses, addrList...)
-		if i < 2 {
-			time.Sleep(200 * time.Millisecond)
-		}
 	}
 
 	added := amgr.AddAddresses(addresses)

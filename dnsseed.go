@@ -158,18 +158,21 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 	}
 
 	var addresses []*appmessage.NetAddress
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 5; i++ {
 		msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
 		err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
 		}
-		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, 10*time.Second)
+		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, 5*time.Second)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
 		}
 		addrList := message.(*appmessage.MsgAddresses).AddressList
 		addresses = append(addresses, addrList...)
+		if i < 4 {
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 
 	added := amgr.AddAddresses(addresses)

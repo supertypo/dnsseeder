@@ -233,16 +233,18 @@ out:
 	for {
 		select {
 		case <-dumpAddressTicker.C:
+			log.Info("Address manager: saving peers")
 			m.savePeers()
 		case <-pruneAddressTicker.C:
+			log.Info("Address manager: pruning peers")
 			m.prunePeers()
 		case <-m.quit:
 			break out
 		}
 	}
-	log.Infof("Address manager: saving peers")
+	log.Info("Address manager: saving peers")
 	m.savePeers()
-	log.Infof("Address manager shutdown")
+	log.Info("Address manager shutdown")
 }
 
 func (m *Manager) prunePeers() {

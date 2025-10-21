@@ -217,8 +217,8 @@ func loadConfig() (*ConfigFlags, error) {
 
 	initLog(activeConfig.NoLogFiles, activeConfig.LogLevel, appLogFile, appErrLogFile)
 
-	if activeConfig.Threads < 1 || activeConfig.Threads > 32 {
-		str := "threads must be between 1 and 32"
+	if activeConfig.Threads < 1 || activeConfig.Threads > 64 {
+		str := "threads must be between 1 and 64"
 		err := errors.Errorf(str)
 		fmt.Fprintln(os.Stderr, err)
 		return nil, err

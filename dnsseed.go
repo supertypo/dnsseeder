@@ -16,7 +16,6 @@ import (
 
 	"github.com/kaspanet/dnsseeder/checkversion"
 	"github.com/kaspanet/dnsseeder/netadapter"
-
 	"github.com/kaspanet/kaspad/infrastructure/config"
 	"github.com/pkg/errors"
 
@@ -28,8 +27,6 @@ import (
 	"github.com/kaspanet/kaspad/app/appmessage"
 	"github.com/kaspanet/kaspad/infrastructure/os/signal"
 
-	"io"
-	"net/http"
 	_ "net/http/pprof"
 )
 
@@ -214,106 +211,6 @@ func newNetAdapter() *netadapter.DnsseedNetAdapter {
 		panic(errors.Wrap(err, "Could not start net adapter"))
 	}
 	return netAdapter
-}
-
-func startHTTPServer(listenAddr string, corsOrigins []string) {
-	allowedOrigins := make(map[string]bool, len(corsOrigins))
-	for _, o := range corsOrigins {
-		allowedOrigins[o] = true
-	}
-	netAdapter := newNetAdapter()
-	perIpQueryCount := make(map[string]int)
-	const maxQueriesPerSource = 100
-	const maxConcurrentQueries = 3
-
-	sema := make(chan struct{}, maxConcurrentQueries)
-	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
-		clientIP := r.Header.Get("X-Forwarded-For")
-		if clientIP != "" {
-			parts := strings.Split(clientIP, ",")
-			clientIP = strings.TrimSpace(parts[0])
-		} else {
-			clientIP, _, _ = net.SplitHostPort(r.RemoteAddr)
-		}
-		if len(sema) == cap(sema) {
-			log.Warnf("Http [%s]: Server busy, try again later", clientIP)
-			http.Error(w, "Server busy, try again later", http.StatusTooManyRequests)
-			return
-		}
-		sema <- struct{}{}
-		defer func() { <-sema }()
-
-		origin := r.Header.Get("Origin")
-		if allowedOrigins[origin] {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
-			}
-		} else {
-			log.Warnf("Http [%s]: Request without correct origin", clientIP)
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-
-		if r.Method == http.MethodOptions {
-			log.Debugf("Http [%s]: Options requested", clientIP)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		if r.Method != http.MethodPost {
-			log.Warnf("Http [%s]: Disallowed method '%s'", clientIP, r.Method)
-			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		if perIpQueryCount[clientIP] >= maxQueriesPerSource {
-			log.Warnf("Http [%s]: Too many queries", clientIP)
-			http.Error(w, "Too many queries", http.StatusTooManyRequests)
-			return
-		}
-		perIpQueryCount[clientIP]++
-
-		defer func() { _ = r.Body.Close() }()
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Warnf("Http [%s]: Failed to read body", clientIP)
-			http.Error(w, "Failed to read body", http.StatusBadRequest)
-			return
-		}
-
-		ipStr := strings.TrimSpace(string(body))
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			log.Infof("Http [%s]: Invalid IP address '%s'", clientIP, ipStr)
-			http.Error(w, "Invalid IP address", http.StatusBadRequest)
-			return
-		}
-
-		addr := appmessage.NewNetAddressIPPort(ip, uint16(peersDefaultPort))
-		msgVersion, err := pollPeer(netAdapter, addr)
-		if err != nil {
-			log.Infof("Http [%s]: Peer '%s' could not be verified, poll failed: %v", clientIP, ipStr, err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		amgr.AddAddresses([]*appmessage.NetAddress{addr})
-		amgr.Attempt(addr)
-		amgr.Good(addr, msgVersion.ID, &msgVersion.UserAgent, nil)
-
-		log.Infof("Http [%s]: Peer '%s' added and verified OK", clientIP, ipStr)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(fmt.Sprintf("Peer %s added and verified OK\n", ipStr)))
-	})
-
-	go func() {
-		log.Infof("Starting HTTP control server on %s", listenAddr)
-		if err := http.ListenAndServe(listenAddr, nil); err != nil {
-			log.Errorf("HTTP control server failed: %v", err)
-		}
-	}()
 }
 
 func main() {

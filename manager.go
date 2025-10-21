@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kaspanet/kaspad/infrastructure/network/addressmanager"
+	"github.com/kaspanet/kaspad/infrastructure/network/netadapter/id"
 
 	"github.com/kaspanet/kaspad/app/appmessage"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
@@ -23,6 +24,7 @@ import (
 // Node repesents a node in the Kaspa network
 type Node struct {
 	Addr         *appmessage.NetAddress
+	Id           *string
 	UserAgent    *string
 	LastAttempt  time.Time
 	LastSuccess  time.Time
@@ -202,10 +204,16 @@ func (m *Manager) Attempt(addr *appmessage.NetAddress) {
 }
 
 // Good updates the last successful connection attempt for the specified ip address to now
-func (m *Manager) Good(addr *appmessage.NetAddress, userAgent *string, subnetworkid *externalapi.DomainSubnetworkID) {
+func (m *Manager) Good(addr *appmessage.NetAddress, id *id.ID, userAgent *string, subnetworkid *externalapi.DomainSubnetworkID) {
 	m.mtx.Lock()
 	node, exists := m.nodes[addr.IP.String()+"_"+strconv.Itoa(int(addr.Port))]
 	if exists {
+		if id != nil {
+			s := id.String()
+			node.Id = &s
+		} else {
+			node.Id = nil
+		}
 		node.UserAgent = userAgent
 		node.LastSuccess = time.Now()
 		node.SubnetworkID = subnetworkid

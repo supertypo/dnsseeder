@@ -87,7 +87,7 @@ func creep() {
 		amgr.AddAddresses(knownPeers)
 		for _, peer := range knownPeers {
 			amgr.Attempt(peer)
-			amgr.Good(peer, nil, nil)
+			amgr.Good(peer, nil, nil, nil)
 		}
 	}
 
@@ -204,7 +204,7 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 				peerAddress, msgVersion.UserAgent, ActiveConfig().MinUaVer)
 		}
 	}
-	amgr.Good(addr, &msgVersion.UserAgent, nil)
+	amgr.Good(addr, msgVersion.ID, &msgVersion.UserAgent, nil)
 	return msgVersion, nil
 }
 
@@ -301,7 +301,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		}
 		amgr.AddAddresses([]*appmessage.NetAddress{addr})
 		amgr.Attempt(addr)
-		amgr.Good(addr, &msgVersion.UserAgent, nil)
+		amgr.Good(addr, msgVersion.ID, &msgVersion.UserAgent, nil)
 
 		log.Infof("Http [%s]: Peer '%s' added and verified OK", clientIP, ipStr)
 		w.WriteHeader(http.StatusOK)

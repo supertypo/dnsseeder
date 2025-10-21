@@ -278,7 +278,7 @@ func main() {
 		}
 	}
 	if cfg.HttpListen != "" {
-		startHTTPServer(cfg.HttpListen, cfg.CorsOrigins)
+		startHTTPServer(cfg.HttpListen, cfg.CorsOrigins, cfg.ApiKey)
 	}
 
 	wg.Add(1)

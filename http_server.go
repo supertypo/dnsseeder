@@ -15,7 +15,7 @@ import (
 	"github.com/kaspanet/kaspad/app/appmessage"
 )
 
-func startHTTPServer(listenAddr string, corsOrigins []string) {
+func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 	allowedOrigins := make(map[string]bool, len(corsOrigins))
 	for _, o := range corsOrigins {
 		allowedOrigins[o] = true
@@ -92,7 +92,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 		perIpQueryCountMutex.Unlock()
 
 		if r.Method == http.MethodGet {
-			getPeers(w)
+			getPeers(w, r, apiKey)
 		} else if r.Method != http.MethodPost {
 			postPeer(w, r, clientIP, netAdapter)
 		} else {
@@ -110,12 +110,13 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 }
 
 type NodeView struct {
-	Id          *string   `json:",omitempty"`
-	UserAgent   *string   `json:",omitempty"`
-	LastSuccess time.Time `json:",omitempty"`
+	Addr        *appmessage.NetAddress `json:",omitempty"`
+	Id          *string                `json:",omitempty"`
+	UserAgent   *string                `json:",omitempty"`
+	LastSuccess time.Time              `json:",omitempty"`
 }
 
-func getPeers(w http.ResponseWriter) {
+func getPeers(w http.ResponseWriter, r *http.Request, apiKey string) {
 	amgr.mtx.RLock()
 	nodes := make([]*NodeView, 0, len(amgr.nodes))
 	cutoff := time.Now().Add(-7 * 24 * time.Hour)
@@ -125,6 +126,9 @@ func getPeers(w http.ResponseWriter) {
 				Id:          n.Id,
 				UserAgent:   n.UserAgent,
 				LastSuccess: n.LastSuccess,
+			}
+			if apiKey != "" && apiKey == r.Header.Get("X-API-KEY") {
+				node.Addr = n.Addr
 			}
 			nodes = append(nodes, node)
 		}

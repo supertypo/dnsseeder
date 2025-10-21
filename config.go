@@ -57,7 +57,8 @@ type ConfigFlags struct {
 	Profile     string   `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
 	GRPCListen  string   `long:"grpclisten" description:"Listen for gRPC requests on address:port"`
 	HttpListen  string   `long:"httplisten" description:"Listen for HTTP requests on address:port"`
-	CorsOrigins []string `long:"corsorigins" description:"Allow cross origin requests (may be specified multiple times)"`
+	ApiKey      string   `long:"apikey" description:"Restrict certain operations to requests containing X-API-KEY"`
+	CorsOrigins []string `long:"corsorigins" description:"Restrict cross origin requests (may be specified multiple times)"`
 	MinProtoVer uint8    `short:"v" long:"minprotocolversion" description:"Minimum protocol version for nodes."`
 	MinUaVer    string   `long:"minuseragentversion" description:"Minimum user agent version for nodes. Prefer minprotocolversion if possible."`
 	NetSuffix   uint16   `long:"netsuffix" description:"Testnet network suffix number"`

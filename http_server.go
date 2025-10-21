@@ -93,7 +93,7 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 
 		if r.Method == http.MethodGet {
 			getPeers(w, r, apiKey)
-		} else if r.Method != http.MethodPost {
+		} else if r.Method == http.MethodPost {
 			postPeer(w, r, clientIP, netAdapter)
 		} else {
 			log.Warnf("Http [%s]: Disallowed method '%s'", clientIP, r.Method)

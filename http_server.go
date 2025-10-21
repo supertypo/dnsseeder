@@ -110,8 +110,8 @@ func startHTTPServer(listenAddr string, corsOrigins []string) {
 }
 
 type NodeView struct {
-	Id          string    `json:",omitempty"`
-	UserAgent   string    `json:",omitempty"`
+	Id          *string   `json:",omitempty"`
+	UserAgent   *string   `json:",omitempty"`
 	LastSuccess time.Time `json:",omitempty"`
 }
 
@@ -122,8 +122,8 @@ func getPeers(w http.ResponseWriter) {
 	for _, n := range amgr.nodes {
 		if n.LastSuccess.After(cutoff) {
 			node := &NodeView{
-				Id:          *n.Id,
-				UserAgent:   *n.UserAgent,
+				Id:          n.Id,
+				UserAgent:   n.UserAgent,
 				LastSuccess: n.LastSuccess,
 			}
 			nodes = append(nodes, node)

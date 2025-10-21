@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,7 +110,8 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 }
 
 type NodeView struct {
-	Addr        *string   `json:",omitempty"`
+	Ip          *string   `json:",omitempty"`
+	Port        *uint16   `json:",omitempty"`
 	Id          *string   `json:",omitempty"`
 	UserAgent   *string   `json:",omitempty"`
 	LastSuccess time.Time `json:",omitempty"`
@@ -130,8 +130,10 @@ func getPeers(w http.ResponseWriter, r *http.Request, apiKey string) {
 			}
 			if apiKey != "" && apiKey == r.Header.Get("X-API-KEY") {
 				if n.Addr != nil && n.Addr.IP != nil {
-					addr := net.JoinHostPort(n.Addr.IP.String(), strconv.Itoa(int(n.Addr.Port)))
-					node.Addr = &addr
+					ip := n.Addr.IP.String()
+					port := n.Addr.Port
+					node.Ip = &ip
+					node.Port = &port
 				}
 			}
 			nodes = append(nodes, node)

@@ -47,11 +47,11 @@ const (
 
 	// defaultStaleGoodTimeout is the time in which a previously reachable
 	// node is considered stale.
-	defaultStaleGoodTimeout = time.Minute * 30
+	defaultStaleGoodTimeout = time.Minute * 15
 
 	// defaultStaleBadTimeout is the time in which a previously unreachable
 	// node is considered stale.
-	defaultStaleBadTimeout = time.Hour
+	defaultStaleBadTimeout = time.Hour * 2
 
 	// dumpAddressInterval is the interval used to dump the address
 	// cache to disk for future use.
@@ -66,7 +66,7 @@ const (
 
 	// pruneExpireTimeout is the expire time in which a node is
 	// considered dead.
-	pruneExpireTimeout = time.Hour * 24
+	pruneExpireTimeout = time.Hour * 24 * 7
 )
 
 // NewManager constructs and returns a new dnsseeder manager, with the provided dataDir

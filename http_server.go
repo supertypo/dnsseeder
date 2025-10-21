@@ -110,11 +110,11 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 }
 
 type NodeView struct {
-	Ip          *string   `json:",omitempty"`
-	Port        *uint16   `json:",omitempty"`
-	Id          *string   `json:",omitempty"`
-	UserAgent   *string   `json:",omitempty"`
-	LastSuccess time.Time `json:",omitempty"`
+	Ip          *string   `json:"ip,omitempty"`
+	Port        *uint16   `json:"port,omitempty"`
+	Id          *string   `json:"id,omitempty"`
+	UserAgent   *string   `json:"userAgent,omitempty"`
+	LastSuccess time.Time `json:"lastSuccess,omitempty"`
 }
 
 func getPeers(w http.ResponseWriter, r *http.Request, apiKey string) {

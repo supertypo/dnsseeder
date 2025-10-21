@@ -157,22 +157,39 @@ func pollPeer(netAdapter *netadapter.DnsseedNetAdapter, addr *appmessage.NetAddr
 			peerAddress, msgVersion.UserAgent, msgVersion.ProtocolVersion, ActiveConfig().MinProtoVer)
 	}
 
-	var addresses []*appmessage.NetAddress
-	for i := 0; i < 5; i++ {
+	addrSet := make(map[string]*appmessage.NetAddress)
+	maxAttempts := 10
+	for i := 0; i < maxAttempts; i++ {
+		log.Debugf("Requesting addresses from peer %s (attempt %d/%d)", peerAddress, i+1, maxAttempts)
 		msgRequestAddresses := appmessage.NewMsgRequestAddresses(true, nil)
 		err = routes.OutgoingRoute.Enqueue(msgRequestAddresses)
 		if err != nil {
+			if len(addrSet) > 0 {
+				break
+			}
 			return nil, errors.Wrapf(err, "failed to request addresses from %s", peerAddress)
 		}
 		message, err := routes.WaitForMessageOfType(appmessage.CmdAddresses, 5*time.Second)
 		if err != nil {
+			if len(addrSet) > 0 {
+				break
+			}
 			return nil, errors.Wrapf(err, "failed to receive addresses from %s", peerAddress)
 		}
 		addrList := message.(*appmessage.MsgAddresses).AddressList
-		addresses = append(addresses, addrList...)
-		if i < 4 {
-			time.Sleep(500 * time.Millisecond)
+		log.Debugf("Got %d addresses from peer %s (attempt %d/%d)", len(addrList), peerAddress, i+1, maxAttempts)
+
+		for _, addr := range addrList {
+			key := net.JoinHostPort(addr.IP.String(), strconv.Itoa(int(addr.Port)))
+			addrSet[key] = addr
 		}
+		if i < maxAttempts-1 {
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+	addresses := make([]*appmessage.NetAddress, 0, len(addrSet))
+	for _, addr := range addrSet {
+		addresses = append(addresses, addr)
 	}
 
 	added := amgr.AddAddresses(addresses)

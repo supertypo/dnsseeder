@@ -59,26 +59,6 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 		sema <- struct{}{}
 		defer func() { <-sema }()
 
-		origin := r.Header.Get("Origin")
-		if allowedOrigins[origin] {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
-			}
-		} else if len(allowedOrigins) > 0 {
-			log.Warnf("Http [%s]: Request without correct origin", clientIP)
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-
-		if r.Method == http.MethodOptions {
-			log.Debugf("Http [%s]: Options requested", clientIP)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
 		perIpQueryCountMutex.Lock()
 		clientQueryCount := perIpQueryCount[clientIP]
 		perIpQueryCountMutex.Unlock()
@@ -94,7 +74,10 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 		if r.Method == http.MethodGet {
 			getPeers(w, r, apiKey)
 		} else if r.Method == http.MethodPost {
-			postPeer(w, r, clientIP, netAdapter)
+			postPeer(w, r, clientIP, netAdapter, allowedOrigins)
+		} else if r.Method == http.MethodOptions {
+			log.Debugf("Http [%s]: Options requested", clientIP)
+			w.WriteHeader(http.StatusNoContent)
 		} else {
 			log.Warnf("Http [%s]: Disallowed method '%s'", clientIP, r.Method)
 			http.Error(w, "Only GET/POST allowed", http.StatusMethodNotAllowed)
@@ -150,7 +133,20 @@ func getPeers(w http.ResponseWriter, r *http.Request, apiKey string) {
 	}
 }
 
-func postPeer(w http.ResponseWriter, r *http.Request, clientIP string, netAdapter *netadapter.DnsseedNetAdapter) {
+func postPeer(w http.ResponseWriter, r *http.Request, clientIP string, netAdapter *netadapter.DnsseedNetAdapter, allowedOrigins map[string]bool) {
+	origin := r.Header.Get("Origin")
+	if allowedOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+		}
+	} else if len(allowedOrigins) > 0 {
+		log.Warnf("Http [%s]: Request without correct origin", clientIP)
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
 	defer func() { _ = r.Body.Close() }()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

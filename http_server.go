@@ -36,6 +36,8 @@ func startHTTPServer(listenAddr string, corsOrigins []string, apiKey string) {
 			for ip := range perIpQueryCount {
 				if perIpQueryCount[ip] > 0 {
 					perIpQueryCount[ip]--
+				} else {
+				    delete(perIpQueryCount, ip)
 				}
 			}
 			perIpQueryCountMutex.Unlock()
